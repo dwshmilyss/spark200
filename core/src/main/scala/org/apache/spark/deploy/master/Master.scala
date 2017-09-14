@@ -574,6 +574,10 @@ private[deploy] class Master(
    * User requests 3 executors (spark.cores.max = 48, spark.executor.cores = 16). If 1 core is
    * allocated at a time, 12 cores from each worker would be assigned to each executor.
    * Since 12 < 16, no executors would launch [SPARK-8881].
+    *
+    *  两种算法：一种是spreadOutApps(默认),另一种是非spreadOutApps
+    * 默认：会将每个application,要启动的executor都平均分配到每个worker上，比如有20cpu core,有10个worker,那么实际会遍历两遍，每次循环，每个worker分配一个core，最后每个worker分配了两个core
+    * 非spreadOutApps：每个application,都尽可能少的分配到worker上去。比如总共有10个worker,每个有10个core，application总共要分配20个core,那么只会分配到两个worker上
    */
   private def scheduleExecutorsOnWorkers(
       app: ApplicationInfo,
@@ -690,32 +694,52 @@ private[deploy] class Master(
   /**
    * Schedule the currently available resources among waiting apps. This method will be called
    * every time a new app joins or resource availability changes.
+    * 其实这个方法就是对driver的调度
    */
   private def schedule(): Unit = {
+    //当master不是alive时，直接reuturn
+    //也就是说Standby是不参与资源调度的
     if (state != RecoveryState.ALIVE) {
       return
     }
     // Drivers take strict precedence over executors
+    //Random.shuffle作用就是把集合随机打乱
+    //取出workers中所有之前注册的worker,进行过滤，必须状态是Alive的worker
+    //把worker随机的打乱
     val shuffledAliveWorkers = Random.shuffle(workers.toSeq.filter(_.state == WorkerState.ALIVE))
     val numWorkersAlive = shuffledAliveWorkers.size
     var curPos = 0
+
+    /**
+      * 只有在模式是yarn-cluster提交后，才会注册driver,因为standalone与yarn-client
+都会在本地启动dirver,而不会来注册driver,就更不可能被master来调度
+所以说下面的这个for只会运行在yarn-cluster模式下提交下。
+      */
     for (driver <- waitingDrivers.toList) { // iterate over a copy of waitingDrivers
       // We assign workers to each waiting driver in a round-robin fashion. For each driver, we
       // start from the last worker that was assigned a driver, and continue onwards until we have
       // explored all alive workers.
       var launched = false
       var numWorkersVisited = 0
+      /**
+        * while中的条件，当还有活着的worker没有被遍历到，就继续遍历
+        * 而且这个driver在这个worker中还没有启动,launched=false
+        */
       while (numWorkersVisited < numWorkersAlive && !launched) {
         val worker = shuffledAliveWorkers(curPos)
         numWorkersVisited += 1
         if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
+          //启动driver
           launchDriver(worker, driver)
+          //把此driver从waitingDrivers中去掉
           waitingDrivers -= driver
           launched = true
         }
+        //将指针指向下一个worker
         curPos = (curPos + 1) % numWorkersAlive
       }
     }
+    //在worker上调度分配executor 一个worker上能分配几个executor由这个方法决定
     startExecutorsOnWorkers()
   }
 

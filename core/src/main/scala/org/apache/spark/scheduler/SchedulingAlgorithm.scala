@@ -28,10 +28,14 @@ private[spark] trait SchedulingAlgorithm {
 
 private[spark] class FIFOSchedulingAlgorithm extends SchedulingAlgorithm {
   override def comparator(s1: Schedulable, s2: Schedulable): Boolean = {
-    val priority1 = s1.priority
+    val priority1 = s1.priority //这个其实就是jobId
     val priority2 = s2.priority
+    /**
+      * 因为jobId是顺序生成的，如果priority1比priority2小，那么返回true，表示s1的优先级比s2的高
+      * stage Id 同理
+      */
     var res = math.signum(priority1 - priority2)
-    if (res == 0) {
+    if (res == 0) {//如果Job ID相同，就比较Stage ID
       val stageId1 = s1.stageId
       val stageId2 = s2.stageId
       res = math.signum(stageId1 - stageId2)
@@ -40,13 +44,20 @@ private[spark] class FIFOSchedulingAlgorithm extends SchedulingAlgorithm {
   }
 }
 
+/**
+（1）如果s1所在Pool或者TaskSetManager中运行状态的task数量比minShare小，s2所在Pool或者TaskSetManager中运行状态的task数量比minShare大，那么s1会优先调度。反之，s2优先调度。
+（2）如果s1和s2所在Pool或者TaskSetManager中运行状态的task数量都比各自minShare小，那么minShareRatio小的优先被调度。
+minShareRatio是运行状态task数与minShare的比值，即相对来说minShare使用较少的先被调度。
+（3）如果minShareRatio相同，那么最后比较各自Pool的名字。
+  */
 private[spark] class FairSchedulingAlgorithm extends SchedulingAlgorithm {
   override def comparator(s1: Schedulable, s2: Schedulable): Boolean = {
-    val minShare1 = s1.minShare
+    //minShare对应fairscheduler.xml配置文件中的minShare属性
+    val minShare1 = s1.minShare//在这里share理解成份额，即每个调度池要求的最少cpu核数
     val minShare2 = s2.minShare
-    val runningTasks1 = s1.runningTasks
+    val runningTasks1 = s1.runningTasks// 该Pool或者TaskSetManager中正在运行的任务数
     val runningTasks2 = s2.runningTasks
-    val s1Needy = runningTasks1 < minShare1
+    val s1Needy = runningTasks1 < minShare1// 如果正在运行任务数比该调度池最小cpu核数要小
     val s2Needy = runningTasks2 < minShare2
     val minShareRatio1 = runningTasks1.toDouble / math.max(minShare1, 1.0)
     val minShareRatio2 = runningTasks2.toDouble / math.max(minShare2, 1.0)

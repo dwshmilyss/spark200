@@ -135,17 +135,28 @@ private[spark] class TaskSchedulerImpl(
   def initialize(backend: SchedulerBackend) {
     this.backend = backend
     // temporarily set rootPool name to empty
+    // 初始化一个空的调度池
     rootPool = new Pool("", schedulingMode, 0, 0)
     schedulableBuilder = {
       schedulingMode match {
         case SchedulingMode.FIFO =>
+
+          /**
+            * 先进先出队列模式下，rootPool通过一个ConcurrentLinkedQueue包含了一组TaskSetManager
+            */
           new FIFOSchedulableBuilder(rootPool)
         case SchedulingMode.FAIR =>
+
+          /**
+            * 公平模式下，构建了一棵树，树中的非叶子节点也是一个pool
+            * 而叶子节点都是 TaskSetManager
+            */
           new FairSchedulableBuilder(rootPool, conf)
         case _ =>
           throw new IllegalArgumentException(s"Unsupported spark.scheduler.mode: $schedulingMode")
       }
     }
+    //在FIFO模式下实现为空
     schedulableBuilder.buildPools()
   }
 
@@ -155,7 +166,8 @@ private[spark] class TaskSchedulerImpl(
     /**
       * 根据部署模式启动相应的 SchedulerBackend
       * Standalone : StandaloneSchedulerBackend
-      * yarn :
+      * yarn-client : YarnClientSchedulerBackend
+      * yarn-cluster : YarnClusterSchedulerBackend
       */
     backend.start()
 
@@ -177,11 +189,15 @@ private[spark] class TaskSchedulerImpl(
     val tasks = taskSet.tasks
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
     this.synchronized {
+      // 生成一个TaskSetManager类型对象，
+      // task最大重试次数，由参数spark.task.maxFailures设置，默认为4
       val manager = createTaskSetManager(taskSet, maxTaskFailures)
       val stage = taskSet.stageId
+      // key为stageId，value为一个HashMap，这个HashMap中的key为stageAttemptId，value为TaskSetManager对象
       val stageTaskSets =
         taskSetsByStageIdAndAttempt.getOrElseUpdate(stage, new HashMap[Int, TaskSetManager])
       stageTaskSets(taskSet.stageAttemptId) = manager
+      //当前taskset不冲突并且不是僵尸进程
       val conflictingTaskSet = stageTaskSets.exists { case (_, ts) =>
         ts.taskSet != taskSet && !ts.isZombie
       }
@@ -189,6 +205,7 @@ private[spark] class TaskSchedulerImpl(
         throw new IllegalStateException(s"more than one active taskSet for stage $stage:" +
           s" ${stageTaskSets.toSeq.map{_._2.taskSet.id}.mkString(",")}")
       }
+      // 根据调度模式生成FIFOSchedulableBuilder或者FairSchedulableBuilder，将当前的TaskSetManager提交到调度池中
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
 
       if (!isLocal && !hasReceivedTask) {
@@ -206,6 +223,7 @@ private[spark] class TaskSchedulerImpl(
       }
       hasReceivedTask = true
     }
+    // 向schedulerBackend申请资源
     backend.reviveOffers()
   }
 
@@ -253,6 +271,16 @@ private[spark] class TaskSchedulerImpl(
       .format(manager.taskSet.id, manager.parent.name))
   }
 
+  /**
+    * 这个方法主要是在分配的executor资源上，执行taskSet中包含的所有task。
+    * 首先遍历分配到的executor，如果当前executor中的cores个数满足配置的单个task需要的core数要求(该core数由参数spark.task.cpus确定，默认值为1)，才能在该executor上启动task。
+    * @param taskSet
+    * @param maxLocality
+    * @param shuffledOffers
+    * @param availableCpus
+    * @param tasks
+    * @return
+    */
   private def resourceOfferSingleTaskSet(
       taskSet: TaskSetManager,
       maxLocality: TaskLocality,
@@ -260,19 +288,19 @@ private[spark] class TaskSchedulerImpl(
       availableCpus: Array[Int],
       tasks: Seq[ArrayBuffer[TaskDescription]]) : Boolean = {
     var launchedTask = false
-    for (i <- 0 until shuffledOffers.size) {
-      val execId = shuffledOffers(i).executorId
-      val host = shuffledOffers(i).host
-      if (availableCpus(i) >= CPUS_PER_TASK) {
+    for (i <- 0 until shuffledOffers.size) {// 顺序遍历当前存在的Executor
+      val execId = shuffledOffers(i).executorId // Executor ID
+      val host = shuffledOffers(i).host // Executor所在的host
+      if (availableCpus(i) >= CPUS_PER_TASK) { // 如果当前executor上的core数满足配置的单个task的core数要求
         try {
-          for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
+          for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {// 为当前stage分配一个executor
             tasks(i) += task
             val tid = task.taskId
-            taskIdToTaskSetManager(tid) = taskSet
-            taskIdToExecutorId(tid) = execId
-            executorIdToTaskCount(execId) += 1
-            availableCpus(i) -= CPUS_PER_TASK
-            assert(availableCpus(i) >= 0)
+            taskIdToTaskSetManager(tid) = taskSet // 存储该task->taskSet的映射关系
+            taskIdToExecutorId(tid) = execId // 存储该task分配到的executorId
+            executorIdToTaskCount(execId) += 1 // 该executor上执行的task个数加一
+            availableCpus(i) -= CPUS_PER_TASK // 该Executor可用core数减一
+            assert(availableCpus(i) >= 0) // 如果启动task后，该executor上的core数大于等于0，才算正常启动。也就是说启动前该executor至少有一个core
             launchedTask = true
           }
         } catch {
@@ -316,25 +344,32 @@ private[spark] class TaskSchedulerImpl(
     }
 
     // Randomly shuffle offers to avoid always placing tasks on the same set of workers.
+    // 为避免多个Task集中分配到某些机器上，对这些Task进行随机打散.
     val shuffledOffers = Random.shuffle(offers)
     // Build a list of tasks to assign to each worker.
+    //存储分配好资源的task
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores))
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
+    // 从调度池中获取排好序的TaskSetManager，由调度池确定TaskSet的执行顺序
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
-    for (taskSet <- sortedTaskSets) {
+    for (taskSet <- sortedTaskSets) {// 按顺序取出各taskSet
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
         taskSet.parent.name, taskSet.name, taskSet.runningTasks))
-      if (newExecAvail) {
-        taskSet.executorAdded()
+      if (newExecAvail) {// 如果该executor是新分配来的
+        taskSet.executorAdded()// 重新计算TaskSetManager的就近原则
       }
     }
 
     // Take each TaskSet in our scheduling order, and then offer it each node in increasing order
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     // NOTE: the preferredLocality order: PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY
+    // 为从rootPool中获得的TaskSetManager列表分配资源。就近顺序是：
+    // PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY
     var launchedTask = false
+    // 对每一个taskSet，按照就近顺序分配最近的executor来执行task
     for (taskSet <- sortedTaskSets; maxLocality <- taskSet.myLocalityLevels) {
       do {
+        // 将前面随机打散的WorkOffers计算资源按照就近原则分配给taskSet，用于执行其中的task
         launchedTask = resourceOfferSingleTaskSet(
             taskSet, maxLocality, shuffledOffers, availableCpus, tasks)
       } while (launchedTask)
@@ -362,7 +397,7 @@ private[spark] class TaskSchedulerImpl(
         }
         taskIdToTaskSetManager.get(tid) match {
           case Some(taskSet) =>
-            if (TaskState.isFinished(state)) {
+            if (TaskState.isFinished(state)) {// 将运行完成的Task从相关记录器中移除
               taskIdToTaskSetManager.remove(tid)
               taskIdToExecutorId.remove(tid).foreach { execId =>
                 if (executorIdToTaskCount.contains(execId)) {
@@ -371,10 +406,12 @@ private[spark] class TaskSchedulerImpl(
               }
             }
             if (state == TaskState.FINISHED) {
-              taskSet.removeRunningTask(tid)
+              taskSet.removeRunningTask(tid)// TaskSetManager标记该任务已经结束
+              // 成功的Task后续处理逻辑入口
               taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
-            } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
+            } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {// 如果TASK状态为FAILED或KILLED或LOST
               taskSet.removeRunningTask(tid)
+              // 处理失败任务，加入到失败任务处理队列中
               taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
             }
           case None =>

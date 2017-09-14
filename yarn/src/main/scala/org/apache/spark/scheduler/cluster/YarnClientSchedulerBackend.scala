@@ -67,6 +67,7 @@ private[spark] class YarnClientSchedulerBackend(
     if (conf.contains("spark.yarn.credentials.file")) {
       YarnSparkHadoopUtil.get.startExecutorDelegationTokenRenewer(conf)
     }
+    // 启动一个监控线程，当SparkContext结束或者该Application在Yarn上运行结束，这个线程才会结束
     monitorThread = asyncMonitorApplication()
     monitorThread.start()
   }

@@ -413,6 +413,8 @@ private[spark] class TaskSetManager(
    * @param execId the executor Id of the offered resource
    * @param host  the host Id of the offered resource
    * @param maxLocality the maximum locality we want to schedule the tasks at
+    * 把executor分配给taskset之后，最终启动一个个的task，未启动的的task生成TaskDescription
+    * isZombie如果为false，则表示当前TaskSetManager中的task没有全部执行成功，可以继续执行剩余task。
    */
   @throws[TaskNotSerializableException]
   def resourceOffer(
@@ -433,15 +435,16 @@ private[spark] class TaskSetManager(
           allowedLocality = maxLocality
         }
       }
-
+      // 顺序取出TaskSetManager中未执行的task
       dequeueTask(execId, host, allowedLocality) match {
         case Some((index, taskLocality, speculative)) =>
           // Found a task; do some bookkeeping and return a task description
-          val task = tasks(index)
-          val taskId = sched.newTaskId()
+          val task = tasks(index)// 取出一个task
+          val taskId = sched.newTaskId()// 分配一个新的taskId
           // Do various bookkeeping
           copiesRunning(index) += 1
           val attemptNum = taskAttempts(index).size
+          //把task的信息封装成taskInfo
           val info = new TaskInfo(taskId, index, attemptNum, curTime,
             execId, host, taskLocality, speculative)
           taskInfos(taskId) = info
@@ -465,6 +468,7 @@ private[spark] class TaskSetManager(
               abort(s"$msg Exception during serialization: $e")
               throw new TaskNotSerializableException(e)
           }
+          //如果序列化后的task超过100KB 告警
           if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
               !emittedTaskSizeWarning) {
             emittedTaskSizeWarning = true
@@ -480,7 +484,7 @@ private[spark] class TaskSetManager(
           val taskName = s"task ${info.id} in stage ${taskSet.id}"
           logInfo(s"Starting $taskName (TID $taskId, $host, partition ${task.partitionId}," +
             s" $taskLocality, ${serializedTask.limit} bytes)")
-
+          //开始执行task
           sched.dagScheduler.taskStarted(task, info)
           return Some(new TaskDescription(taskId = taskId, attemptNumber = attemptNum, execId,
             taskName, index, serializedTask))

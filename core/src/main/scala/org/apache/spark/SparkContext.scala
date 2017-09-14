@@ -417,6 +417,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // "_jobProgressListener" should be set up before creating SparkEnv because when creating
     // "SparkEnv", some messages will be posted to "listenerBus" and we should not miss them.
     _jobProgressListener = new JobProgressListener(_conf)
+
+    /**
+      * Spark UI页面能够从该对象中获取Spark应用程序的运行时数据
+      */
     listenerBus.addListener(jobProgressListener)
 
     // Create the Spark execution environment (cache, map output tracker, etc)
@@ -491,7 +495,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master, deployMode)
     _schedulerBackend = sched
+    //因为在DAGScheduler中要用到 taskScheduler，所以这里要先初始化taskScheduler
     _taskScheduler = ts
+    //利用当前的SparkContext初始化DAGScheduler
     _dagScheduler = new DAGScheduler(this)
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
 
@@ -542,7 +548,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       }
     _cleaner.foreach(_.start())
 
-    setupAndStartListenerBus()
+
+    setupAndStartListenerBus()//启动和初始化listenerBus
+
     postEnvironmentUpdate()
     postApplicationStart()
 

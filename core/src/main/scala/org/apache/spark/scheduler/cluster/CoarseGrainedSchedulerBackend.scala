@@ -89,6 +89,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // The num of current max ExecutorId used to re-register appMaster
   @volatile protected var currentExecutorIdCounter = 0
 
+
+  /**
+    * driver
+    * 接收分配资源等消息
+    * @param rpcEnv
+    * @param sparkProperties
+    */
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
 
@@ -118,11 +125,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     override def receive: PartialFunction[Any, Unit] = {
       case StatusUpdate(executorId, taskId, state, data) =>
+        // 调用TaskSchedulerImpl.statusUpdate方法处理task状态变更消息
         scheduler.statusUpdate(taskId, state, data.value)
         if (TaskState.isFinished(state)) {
           executorDataMap.get(executorId) match {
             case Some(executorInfo) =>
+              //回收分配的资源
               executorInfo.freeCores += scheduler.CPUS_PER_TASK
+              //再分配给该executorId
               makeOffers(executorId)
             case None =>
               // Ignoring the update since we don't know about the executor.
@@ -131,6 +141,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           }
         }
 
+      /**
+        *  上接backend.reviveOffers()
+        */
       case ReviveOffers =>
         makeOffers()
 
@@ -176,6 +189,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               logDebug(s"Decremented number of pending executors ($numPendingExecutors left)")
             }
           }
+          //向CoarseGrainedExecutorBackend 发送 RegisteredExecutor
           executorRef.send(RegisteredExecutor)
           // Note: some tests expect the reply to come after we put the executor in the map
           context.reply(true)
@@ -211,6 +225,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     private def makeOffers() {
       // Filter out executors under killing
       val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
+      //资源生成好封装成WorkerOffer类型的队列后，就开始进入SchedulerBackend中，由SchedulerBackend分配这些资源
       val workOffers = activeExecutors.map { case (id, executorData) =>
         new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
       }.toSeq
@@ -245,6 +260,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     private def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
       for (task <- tasks.flatten) {
         val serializedTask = ser.serialize(task)
+        //序列化后的task大小，如果超过128MB，则不能执行。并把对应的taskSetManager置为zombie模式
         if (serializedTask.limit >= maxRpcMessageSize) {
           scheduler.taskIdToTaskSetManager.get(task.taskId).foreach { taskSetMgr =>
             try {
@@ -265,6 +281,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           logInfo(s"Launching task ${task.taskId} on executor id: ${task.executorId} hostname: " +
             s"${executorData.executorHost}.")
 
+          //发送到executor上执行(standalone 模式下是 CoarseGrainedExecutorBackend )
+          //CoarseGrainedExecutorBackend 是在启动 StandaloneSchedulerBackend 的时候启动的
           executorData.executorEndpoint.send(LaunchTask(new SerializableBuffer(serializedTask)))
         }
       }
@@ -394,6 +412,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
   }
 
+  /**
+    * 上接TashSchedulerImpl的backend.reviveOffers()
+    *  driverEndpoint也在这个类中
+    */
   override def reviveOffers() {
     driverEndpoint.send(ReviveOffers)
   }

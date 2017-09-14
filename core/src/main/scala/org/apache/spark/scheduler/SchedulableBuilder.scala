@@ -54,7 +54,9 @@ private[spark] class FIFOSchedulableBuilder(val rootPool: Pool)
 private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   extends SchedulableBuilder with Logging {
 
+  //通过该参数可以指定自定义的调度配置文件
   val schedulerAllocFile = conf.getOption("spark.scheduler.allocation.file")
+  //默认的调度配置文件 在SPARK_HOME/conf目录下
   val DEFAULT_SCHEDULER_FILE = "fairscheduler.xml"
   val FAIR_SCHEDULER_PROPERTIES = "spark.scheduler.pool"
   val DEFAULT_POOL_NAME = "default"
@@ -101,6 +103,13 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
     val xml = XML.load(is)
     for (poolNode <- (xml \\ POOLS_PROPERTY)) {
 
+      /**
+        * 参数含义：
+        （1）name: 该调度池的名称，可根据该参数使用指定pool，通过sc.setLocalProperty("spark.scheduler.pool", "test")指定
+        （2）weight: 该调度池的权重，各调度池根据该参数分配系统资源。每个调度池得到的资源数为weight / sum(weight)，weight为2的分配到的资源为weight为1的两倍。
+        （3）minShare: 该调度池需要的最小资源数（CPU核数）。fair调度器首先会尝试为每个调度池分配最少minShare资源，然后剩余资源才会按照weight大小继续分配。
+        （4）schedulingMode: 该调度池内的调度模式。
+        */
       val poolName = (poolNode \ POOL_NAME_PROPERTY).text
       var schedulingMode = DEFAULT_SCHEDULING_MODE
       var minShare = DEFAULT_MINIMUM_SHARE

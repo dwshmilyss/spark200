@@ -42,8 +42,8 @@ private[spark] abstract class LauncherBackend {
     if (port != None && secret != None) {
       val s = new Socket(InetAddress.getLoopbackAddress(), port.get)
       connection = new BackendConnection(s)
-      connection.send(new Hello(secret.get, SPARK_VERSION))
       clientThread = LauncherBackend.threadFactory.newThread(connection)
+      connection.send(new Hello(secret.get, SPARK_VERSION))
       clientThread.start()
       _isConnected = true
     }

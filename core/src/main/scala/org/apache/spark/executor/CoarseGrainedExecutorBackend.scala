@@ -76,6 +76,10 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   override def receive: PartialFunction[Any, Unit] = {
+    //注册并启动executor
+    // StandaloneSchedulerBackend.start() -> CoarseGrainedExecutorBackend.run() -> setupEndpoint("Executor", new CoarseGrainedExecutorBackend())
+    // -> CoarseGrainedExecutorBackend.onStart() -> DriverEndpointRef.ask(RegisteredExecutor)
+    // -> DriverEndpointRef.receiveAndReply(RegisterExecutor) -> CoarseGrainedExecutorBackend.send(RegisteredExecutor)
     case RegisteredExecutor =>
       logInfo("Successfully registered with driver")
       try {
@@ -89,9 +93,10 @@ private[spark] class CoarseGrainedExecutorBackend(
       exitExecutor(1, "Slave registration failed: " + message)
 
     case LaunchTask(data) =>
-      if (executor == null) {
+      if (executor == null) {// 如果分配的executor为空，即当前task无分配的executor，则直接退出
         exitExecutor(1, "Received LaunchTask command but executor was null")
       } else {
+        //把 TaskDescription 反序列化出来
         val taskDesc = ser.deserialize[TaskDescription](data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
         executor.launchTask(this, taskId = taskDesc.taskId, attemptNumber = taskDesc.attemptNumber,

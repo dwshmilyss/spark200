@@ -242,6 +242,7 @@ private[spark] class Executor(
       startGCTime = computeTotalGcTime()
 
       try {
+        //反序列化task，获取该Task需要使用到的file和jar文件(其实就是TaskDescription._serializedTask)
         val (taskFiles, taskJars, taskProps, taskBytes) =
           Task.deserializeWithDependencies(serializedTask)
 
@@ -270,6 +271,7 @@ private[spark] class Executor(
         // Run the actual task and measure its runtime.
         taskStart = System.currentTimeMillis()
         var threwException = true
+        // 调用Task.run方法，开始运行task
         val value = try {
           val res = task.run(
             taskAttemptId = taskId,
@@ -310,6 +312,7 @@ private[spark] class Executor(
 
         val resultSer = env.serializer.newInstance()
         val beforeSerialization = System.currentTimeMillis()
+        //序列化Task的运行结果
         val valueBytes = resultSer.serialize(value)
         val afterSerialization = System.currentTimeMillis()
 
@@ -325,18 +328,22 @@ private[spark] class Executor(
         // Note: accumulator updates must be collected after TaskMetrics is updated
         val accumUpdates = task.collectAccumulatorUpdates()
         // TODO: do not serialize value twice
+        //利用序列化后的task的结果封装成一个DirectTaskResult
         val directResult = new DirectTaskResult(valueBytes, accumUpdates)
+        //再对DirectTaskResult序列化
         val serializedDirectResult = ser.serialize(directResult)
+        //序列化后的大小
         val resultSize = serializedDirectResult.limit
 
         // directSend = sending directly back to the driver
         val serializedResult: ByteBuffer = {
+          //因为序列化后的结果要给到driver 如何超出了driver的内存限制(spark.driver.maxResultSize 1g) 直接丢弃该结果
           if (maxResultSize > 0 && resultSize > maxResultSize) {
             logWarning(s"Finished $taskName (TID $taskId). Result is larger than maxResultSize " +
               s"(${Utils.bytesToString(resultSize)} > ${Utils.bytesToString(maxResultSize)}), " +
               s"dropping it.")
             ser.serialize(new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize))
-          } else if (resultSize > maxDirectResultSize) {
+        } else if (resultSize > maxDirectResultSize) {//如果大小超过 maxDirectResultSize，则通过BlockManager回传
             val blockId = TaskResultBlockId(taskId)
             env.blockManager.putBytes(
               blockId,
@@ -351,6 +358,7 @@ private[spark] class Executor(
           }
         }
 
+        //task执行结束后通过该方法更新task的状态，通过driver.send发送一个StatusUpdate类型的消息
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
 
       } catch {
