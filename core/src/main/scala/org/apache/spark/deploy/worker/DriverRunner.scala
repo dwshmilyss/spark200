@@ -79,7 +79,9 @@ private[deploy] class DriverRunner(
     new Thread("DriverRunner for " + driverId) {
       override def run() {
         try {
+          //针对每个driverId创建一个临时目录
           val driverDir = createWorkingDirectory()
+          //将DriverDesc.jarUrl通过Netty从Driver机器远程拷贝过来()
           val localJarFilename = downloadUserJar(driverDir)
 
           def substituteVariables(argument: String): String = argument match {
@@ -89,6 +91,7 @@ private[deploy] class DriverRunner(
           }
 
           // TODO: If we add ability to submit multiple jars they should also be added here
+          //根据DriverDesc.command模板构建本地执行的command命令，并启动该command对应的Process进程
           val builder = CommandUtils.buildProcessBuilder(driverDesc.command, securityManager,
             driverDesc.mem, sparkHome.getAbsolutePath, substituteVariables)
           launchDriver(builder, driverDir, driverDesc.supervise)
@@ -179,6 +182,7 @@ private[deploy] class DriverRunner(
       val formattedCommand = builder.command.asScala.mkString("\"", "\" \"", "\"")
       val header = "Launch Command: %s\n%s\n\n".format(formattedCommand, "=" * 40)
       Files.append(header, stderr, StandardCharsets.UTF_8)
+      //将Process的输出流输出到文件stdout/stderror,如果Process启动失败，进行1-5的秒的反复启动工作，直到启动成功，再释放Worker节点的DriverRunner的资源
       CommandUtils.redirectStream(process.getErrorStream, stderr)
     }
     runCommandWithRetry(ProcessBuilderLike(builder), initialize, supervise)

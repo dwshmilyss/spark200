@@ -177,10 +177,15 @@ private[spark] class ExternalSorter[K, V, C](
    */
   private[spark] def numSpills: Int = spills.size
 
+  /**
+    *
+    * @param records
+    */
   def insertAll(records: Iterator[Product2[K, V]]): Unit = {
     // TODO: stop combining if we find that the reduction factor isn't high
     val shouldCombine = aggregator.isDefined
 
+    //map端处理数据的时候，先判断这个过程是否使用了combiner
     if (shouldCombine) {
       // Combine values in-memory first using our AppendOnlyMap
       val mergeValue = aggregator.get.mergeValue
@@ -192,7 +197,9 @@ private[spark] class ExternalSorter[K, V, C](
       while (records.hasNext) {
         addElementsRead()
         kv = records.next()
+        //如果使用了combiner则采用PartitionedAppendOnlyMap数据结构作为内存缓冲区进行数据存储，对于相同key的数据每次都会进行更新合并
         map.changeValue((getPartition(kv._1), kv._1), update)
+        //写入数据的过程中如果出现内存不够用的情况则会发生溢写，溢写
         maybeSpillCollection(usingMap = true)
       }
     } else {
@@ -200,6 +207,7 @@ private[spark] class ExternalSorter[K, V, C](
       while (records.hasNext) {
         addElementsRead()
         val kv = records.next()
+        //如果没有使用combiner，则采用PartitionedPairBuffer数据结构，把每次处理的数据追加到队列末尾
         buffer.insert(getPartition(kv._1), kv._1, kv._2.asInstanceOf[C])
         maybeSpillCollection(usingMap = false)
       }

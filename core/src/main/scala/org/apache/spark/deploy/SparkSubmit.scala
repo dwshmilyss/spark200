@@ -527,6 +527,10 @@ object SparkSubmit {
         childArgs += (args.primaryResource, args.mainClass)
       } else {
         // In legacy standalone cluster mode, use Client as a wrapper around the user class
+        /**
+          * 在StandaloneCluster模式下，通过反射的形式运行Client.main()
+          * 在Client.main()中会启动ClientEndpoint
+          */
         childMainClass = "org.apache.spark.deploy.Client"
         if (args.supervise) { childArgs += "--supervise" }
         Option(args.driverMemory).foreach { m => childArgs += ("--memory", m) }

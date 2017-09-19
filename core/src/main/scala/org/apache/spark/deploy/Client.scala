@@ -93,6 +93,10 @@ private class ClientEndpoint(
           driverArgs.cores,
           driverArgs.supervise,
           command)
+
+        /**
+          * client向master发起RequestSubmitDriver请求
+          */
         ayncSendToMasterAndForwardReply[SubmitDriverResponse](
           RequestSubmitDriver(driverDescription))
 
