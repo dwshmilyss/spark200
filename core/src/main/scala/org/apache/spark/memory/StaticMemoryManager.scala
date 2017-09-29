@@ -26,6 +26,9 @@ import org.apache.spark.storage.BlockId
  * The sizes of the execution and storage regions are determined through
  * `spark.shuffle.memoryFraction` and `spark.storage.memoryFraction` respectively. The two
  * regions are cleanly separated such that neither usage can borrow memory from the other.
+  *
+  * 静态内存管理器
+  *  内存的分配是按照固定比例配置好的，不可以互借，所以叫静态，Spark2.0之前的版本默认用这个
  */
 private[spark] class StaticMemoryManager(
     conf: SparkConf,
@@ -106,6 +109,9 @@ private[spark] class StaticMemoryManager(
 
 private[spark] object StaticMemoryManager {
 
+  /**
+    * JVM至少需要32M
+    */
   private val MIN_MEMORY_BYTES = 32 * 1024 * 1024
 
   /**
@@ -115,6 +121,10 @@ private[spark] object StaticMemoryManager {
     val systemMaxMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime.maxMemory)
     val memoryFraction = conf.getDouble("spark.storage.memoryFraction", 0.6)
     val safetyFraction = conf.getDouble("spark.storage.safetyFraction", 0.9)
+
+    /**
+      * 即storage memory占executor memory的0.54
+      */
     (systemMaxMemory * memoryFraction * safetyFraction).toLong
   }
 
@@ -139,6 +149,10 @@ private[spark] object StaticMemoryManager {
     }
     val memoryFraction = conf.getDouble("spark.shuffle.memoryFraction", 0.2)
     val safetyFraction = conf.getDouble("spark.shuffle.safetyFraction", 0.8)
+
+    /**
+      * shuffle memory占executor memory的0.16
+      */
     (systemMaxMemory * memoryFraction * safetyFraction).toLong
   }
 

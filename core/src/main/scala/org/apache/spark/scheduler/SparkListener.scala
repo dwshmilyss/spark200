@@ -159,42 +159,50 @@ private[spark] trait SparkListenerInterface {
 
   /**
    * Called when a stage completes successfully or fails, with information on the completed stage.
+    * 当一个state执行成功或者失败的时候调用，包含了已完成stage的信息
    */
   def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit
 
   /**
    * Called when a stage is submitted
+    * 当一个state提交的时候的时候调用
    */
   def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit
 
   /**
    * Called when a task starts
+    * 当一个task任务开始时候调用
    */
   def onTaskStart(taskStart: SparkListenerTaskStart): Unit
 
   /**
    * Called when a task begins remotely fetching its result (will not be called for tasks that do
    * not need to fetch the result remotely).
+    *  当一个task执行成功或者失败的时候调用，包含了已完成task的信息
    */
   def onTaskGettingResult(taskGettingResult: SparkListenerTaskGettingResult): Unit
 
   /**
    * Called when a task ends
+    * 当一个task结束开始时候调用
    */
   def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit
 
   /**
    * Called when a job starts
+    * 当一个job启动开始调用
    */
   def onJobStart(jobStart: SparkListenerJobStart): Unit
 
   /**
    * Called when a job ends
+    * 当一个job执行成功或者失败的时候调用，包含了已完成job的信息
    */
   def onJobEnd(jobEnd: SparkListenerJobEnd): Unit
 
   /**
    * Called when environment properties have been updated
+    * 当一个环境变量改变的时候开始调用
    */
   def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate): Unit
 

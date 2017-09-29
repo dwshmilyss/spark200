@@ -188,7 +188,17 @@ private[spark] class MetricsSystem private (
   }
 
   private def registerSinks() {
+    /**
+      * 以instance = master为例，该方法返回： master -> {
+      * sink.servlet.class = org.apache.spar.metrics.sink.MetricsServlet,
+      * sink.servlet.path = /metrics/master/json}
+      */
     val instConfig = metricsConfig.getInstance(instance)
+    /**
+      * 通过正则表达式处理过之后，返回：servlet -> {
+      * class = org.apache.spark.metrics.sink.MetricsServlet,
+      * path = /metrics/master/json}
+      */
     val sinkConfigs = metricsConfig.subProperties(instConfig, MetricsSystem.SINK_REGEX)
 
     sinkConfigs.foreach { kv =>

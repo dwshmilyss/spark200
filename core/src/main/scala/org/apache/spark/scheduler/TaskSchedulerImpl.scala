@@ -206,6 +206,7 @@ private[spark] class TaskSchedulerImpl(
           s" ${stageTaskSets.toSeq.map{_._2.taskSet.id}.mkString(",")}")
       }
       // 根据调度模式生成FIFOSchedulableBuilder或者FairSchedulableBuilder，将当前的TaskSetManager提交到调度池中
+      // 将任务taskSet放入调度池Pool中。后续通过
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
 
       if (!isLocal && !hasReceivedTask) {

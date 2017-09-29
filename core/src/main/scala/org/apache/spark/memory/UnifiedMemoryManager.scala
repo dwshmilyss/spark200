@@ -43,6 +43,12 @@ import org.apache.spark.storage.BlockId
  *                          This region is not statically reserved; execution can borrow from
  *                          it if necessary. Cached blocks can be evicted only if actual
  *                          storage memory usage exceeds this region.
+  *
+*   联合内存管理器(Spark2.0以后默认使用)
+  *   storage和shuffle是可以互借的，加起来一共占比0.6，这里即为Spark框架运行时所需的内存
+  *   还有一部分称为user memory：写 Spark 程序中产生的临时数据或者是自己维护的一些数据结构也需要给予它一部份的存储空间（例如在RDD的操作中用的的自定义的对象）。占比0.4。
+  *   注意：这个超出了也会报OOM
+  *
  */
 private[spark] class UnifiedMemoryManager private[memory] (
     conf: SparkConf,
@@ -192,6 +198,9 @@ object UnifiedMemoryManager {
   // This serves a function similar to `spark.memory.fraction`, but guarantees that we reserve
   // sufficient memory for the system even for small heaps. E.g. if we have a 1GB JVM, then
   // the memory used for execution and storage will be (1024 - 300) * 0.6 = 434MB by default.
+  /**
+    * 最小300m
+    */
   private val RESERVED_SYSTEM_MEMORY_BYTES = 300 * 1024 * 1024
 
   def apply(conf: SparkConf, numCores: Int): UnifiedMemoryManager = {
@@ -211,6 +220,9 @@ object UnifiedMemoryManager {
     val systemMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime.maxMemory)
     val reservedMemory = conf.getLong("spark.testing.reservedMemory",
       if (conf.contains("spark.testing")) 0 else RESERVED_SYSTEM_MEMORY_BYTES)
+    /**
+      * jvm的heap至少是300*1.5 = 450m
+      */
     val minSystemMemory = (reservedMemory * 1.5).ceil.toLong
     if (systemMemory < minSystemMemory) {
       throw new IllegalArgumentException(s"System memory $systemMemory must " +
@@ -227,6 +239,9 @@ object UnifiedMemoryManager {
       }
     }
     val usableMemory = systemMemory - reservedMemory
+    /**
+      * storage和shuffle总共占比0.6
+      */
     val memoryFraction = conf.getDouble("spark.memory.fraction", 0.6)
     (usableMemory * memoryFraction).toLong
   }

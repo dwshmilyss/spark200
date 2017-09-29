@@ -76,9 +76,9 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   override def receive: PartialFunction[Any, Unit] = {
-    //注册并启动executor
+    //收到 DriverEndpoint 发送的 RegisteredExecutor 消息后，启动executor
     // StandaloneSchedulerBackend.start() -> CoarseGrainedExecutorBackend.run() -> setupEndpoint("Executor", new CoarseGrainedExecutorBackend())
-    // -> CoarseGrainedExecutorBackend.onStart() -> DriverEndpointRef.ask(RegisteredExecutor)
+    // -> CoarseGrainedExecutorBackend.onStart() -> DriverEndpointRef.ask(RegisterExecutor)
     // -> DriverEndpointRef.receiveAndReply(RegisterExecutor) -> CoarseGrainedExecutorBackend.send(RegisteredExecutor)
     case RegisteredExecutor =>
       logInfo("Successfully registered with driver")

@@ -85,6 +85,7 @@ private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends Spa
               }
               return
             }
+            //listener真正处理event的路由逻辑在这个方法里，其实这里调用的是父类的
             postToAll(event)
           } finally {
             self.synchronized {
