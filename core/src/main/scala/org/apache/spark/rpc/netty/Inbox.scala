@@ -53,6 +53,9 @@ private[netty] case class RemoteProcessConnectionError(cause: Throwable, remoteA
 
 /**
  * An inbox that stores messages for an [[RpcEndpoint]] and posts messages to it thread-safely.
+  * Inbox的作用：
+     1、内部了维护了链表messages，用于存储消息，同时维护该消息对应消费者Endpoint。
+     2、提供了post和process两个方法，分别用于添加消息到messages和消费消息，process方法在MessageLoop中被调用。
  */
 private[netty] class Inbox(
     val endpointRef: NettyRpcEndpointRef,
@@ -77,6 +80,9 @@ private[netty] class Inbox(
   private var numActiveThreads = 0
 
   // OnStart should be the first message to process
+  /**
+    * OnStart()应该最先被调用
+    */
   inbox.synchronized {
     messages.add(OnStart)
   }
