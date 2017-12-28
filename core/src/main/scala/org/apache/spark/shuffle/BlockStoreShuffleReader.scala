@@ -80,6 +80,10 @@ private[spark] class BlockStoreShuffleReader[K, C](
 
     val aggregatedIter: Iterator[Product2[K, C]] = if (dep.aggregator.isDefined) {
       if (dep.mapSideCombine) {
+        /**
+          * 如果需要做map端的聚合(对于像reduceByKey这样的聚合算子)，因为reduce task
+          *在拉取数据时会从所有的map task上拉取，所以会边拉取边集合，聚合使用的是 ExternalAppendOnlyMap 的map数据结构
+          */
         // We are reading values that are already combined
         val combinedKeyValuesIterator = interruptibleIter.asInstanceOf[Iterator[(K, C)]]
         dep.aggregator.get.combineCombinersByKey(combinedKeyValuesIterator, context)

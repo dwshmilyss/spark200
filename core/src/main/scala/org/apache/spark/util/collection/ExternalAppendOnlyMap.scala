@@ -295,6 +295,9 @@ class ExternalAppendOnlyMap[K, V, C](
 
     // A queue that maintains a buffer for each stream we are currently merging
     // This queue maintains the invariant that it only contains non-empty buffers
+    /**
+      * mergeHeap 里元素数量等于所有spill文件个数加一
+      */
     private val mergeHeap = new mutable.PriorityQueue[StreamBuffer]
 
     // Input streams are derived both from the in-memory map and spilled maps on disk

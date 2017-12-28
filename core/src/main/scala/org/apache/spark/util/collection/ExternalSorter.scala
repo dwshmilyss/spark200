@@ -124,6 +124,17 @@ private[spark] class ExternalSorter[K, V, C](
   // Data structures to store in-memory objects before we spill. Depending on whether we have an
   // Aggregator set, we either put objects into an AppendOnlyMap where we combine them, or we
   // store them in an array buffer.
+  /**
+    * 这里内部维护了一个数组 在父类AppendOnlyMap中。这里可能会消耗大量内存，所以会溢写到磁盘
+    * 他消耗的并不是Storage的内存，所谓Storage内存，指的是由blockManager管理起来的内存。
+    * PartitionedAppendOnlyMap 放不下，要落地，那么不能硬生生的写磁盘，所以需要个buffer,然后把buffer再一次性写入磁盘文件。这个buffer是由参数spark.shuffle.file.buffer=32k 控制
+    * 数据获取的过程中，序列化反序列化，也是需要空间的，所以Spark 对数量做了限制。通过 spark.shuffle.spill.batchSize=10000 控制
+    * 假设一个Executor的可使用的Core为 C个，那么对应需要的内存消耗为：
+    *   C * 32k + C * 10000个Record + C * PartitionedAppendOnlyMap
+    * 那C * PartitionedAppendOnlyMap 到底会有多大呢？
+    *    C * PartitionedAppendOnlyMap < ExecutorHeapMemeory * 0.2 * 0.8
+    *   即 不能大于spark.shuffle.memoryFraction*safetyFraction
+    */
   @volatile private var map = new PartitionedAppendOnlyMap[K, C]
   @volatile private var buffer = new PartitionedPairBuffer[K, C]
 
@@ -216,7 +227,8 @@ private[spark] class ExternalSorter[K, V, C](
 
   /**
    * Spill the current in-memory collection to disk if needed.
-   *
+   * 判断是否满足溢写磁盘的条件
+    * estimateSize()是使用采样算法(不能每放一条记录就做一次内存检查，消耗太大)
    * @param usingMap whether we're using a map or buffer as our current in-memory collection
    */
   private def maybeSpillCollection(usingMap: Boolean): Unit = {
