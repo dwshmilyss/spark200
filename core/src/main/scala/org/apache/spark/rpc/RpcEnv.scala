@@ -30,6 +30,7 @@ import org.apache.spark.util.RpcUtils
 /**
  * A RpcEnv implementation must have a [[RpcEnvFactory]] implementation with an empty constructor
  * so that it can be created via Reflection.
+  * 通过工厂创建NettyEnv
  */
 private[spark] object RpcEnv {
 
@@ -54,6 +55,9 @@ private[spark] object RpcEnv {
  * sender, or logging them if no such sender or `NotSerializableException`.
  *
  * [[RpcEnv]] also provides some methods to retrieve [[RpcEndpointRef]]s given name or uri.
+  * 这里面最重要的2个方法就是
+  * 1、setupEndpoint 注册endpoint，必须指定名称，客户端路由就靠这个名称来找endpoint
+  * 2、setupEndpointRef 拿到一个endpoint的引用 收发消息就由引用来代理
  */
 private[spark] abstract class RpcEnv(conf: SparkConf) {
 
@@ -73,6 +77,7 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
   /**
    * Register a [[RpcEndpoint]] with a name and return its [[RpcEndpointRef]]. [[RpcEnv]] does not
    * guarantee thread-safety.
+    * setupEndpoint会在Dispatcher中注册Endpoint
    */
   def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef
 
