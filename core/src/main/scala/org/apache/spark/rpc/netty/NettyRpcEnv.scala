@@ -115,6 +115,7 @@ private[netty] class NettyRpcEnv(
       } else {
         java.util.Collections.emptyList()
       }
+    //在这里真正启动netty server
     server = transportContext.createServer(host, port, bootstraps)
     dispatcher.registerRpcEndpoint(
       RpcEndpointVerifier.NAME, new RpcEndpointVerifier(this, dispatcher))
@@ -123,10 +124,6 @@ private[netty] class NettyRpcEnv(
   @Nullable
   override lazy val address: RpcAddress = {
     if (server != null) RpcAddress(host, server.getPort()) else null
-  }
-
-  override def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef = {
-    dispatcher.registerRpcEndpoint(name, endpoint)
   }
 
   def asyncSetupEndpointRefByURI(uri: String): Future[RpcEndpointRef] = {
@@ -141,6 +138,10 @@ private[netty] class NettyRpcEnv(
         Future.failed(new RpcEndpointNotFoundException(uri))
       }
     }(ThreadUtils.sameThread)
+  }
+
+  override def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef = {
+    dispatcher.registerRpcEndpoint(name, endpoint)
   }
 
   override def stop(endpointRef: RpcEndpointRef): Unit = {

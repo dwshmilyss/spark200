@@ -182,7 +182,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       case GenerateJobs(time) => generateJobs(time)
       case ClearMetadata(time) => clearMetadata(time)
       case DoCheckpoint(time, clearCheckpointDataLater) =>
-        doCheckpoint(time, clearCheckpointDataLater)
+        doCheckpoint(time, clearCheckpointDataLater)//写入一个Checkpoint对象，其核心就是采用序列化技术把对象写入磁盘
       case ClearCheckpointData(time) => clearCheckpointData(time)
     }
   }
@@ -253,6 +253,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       case Failure(e) =>
         jobScheduler.reportError("Error generating jobs for time " + time, e)
     }
+    //在每次生成Job后，都会触发checkpoint的写入事件。
     eventLoop.post(DoCheckpoint(time, clearCheckpointDataLater = false))
   }
 

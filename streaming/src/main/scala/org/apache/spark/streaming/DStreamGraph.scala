@@ -147,6 +147,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     logInfo("Cleared checkpoint data for time " + time)
   }
 
+  //DStreamGraph的恢复过程中，关键是恢复所有的outputStream
   def restoreCheckpointData() {
     logInfo("Restoring checkpoint data")
     this.synchronized {
