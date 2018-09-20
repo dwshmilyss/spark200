@@ -18,6 +18,9 @@
 // scalastyle:off println
 package org.apache.spark.examples
 
+import org.apache.spark.scheduler.TaskLocality
+import org.apache.spark.sql.SparkSession
+
 import scala.math.random
 
 object LocalPi {
@@ -29,6 +32,20 @@ object LocalPi {
       if (x*x + y*y < 1) count += 1
     }
     println("Pi is roughly " + 4 * count / 100000.0)
+    println(TaskLocality.ANY > TaskLocality.RACK_LOCAL)
+    println(TaskLocality.RACK_LOCAL > TaskLocality.NO_PREF)
+    println(TaskLocality.NO_PREF > TaskLocality.NODE_LOCAL)
+    println(TaskLocality.NODE_LOCAL > TaskLocality.PROCESS_LOCAL)
+
+
+    val spark = SparkSession
+      .builder
+      .appName("test")
+        .master("local[*]")
+      .getOrCreate()
+
+    spark.sparkContext.parallelize(1 to 10,2).map(_+1).collect().foreach(println)
+
   }
 }
 // scalastyle:on println

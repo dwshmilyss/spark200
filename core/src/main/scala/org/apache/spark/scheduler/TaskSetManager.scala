@@ -122,6 +122,10 @@ private[spark] class TaskSetManager(
   // of failures.
   // Duplicates are handled in dequeueTaskFromList, which ensures that a
   // task hasn't already started running before launching it.
+  /**
+    * key 为executoroId，value 为task index 数组。
+    * 保存
+    */
   private val pendingTasksForExecutor = new HashMap[String, ArrayBuffer[Int]]
 
   // Set of pending tasks for each host. Similar to pendingTasksForExecutor,
@@ -162,11 +166,18 @@ private[spark] class TaskSetManager(
 
   // Add all our tasks to the pending lists. We do this in reverse order
   // of task index so that tasks with low indices get launched first.
+  /**
+    * 初始化TaskSetManager 中的一些成员变量 比如：
+    * pendingTasksForExecutor
+    */
   for (i <- (0 until numTasks).reverse) {
     addPendingTask(i)
   }
 
   // Figure out which locality levels we have in our TaskSet, so we can do delay scheduling
+  /**
+    * 确定本地性 在延时调度时发挥作用 即优先执行本地性高的task
+    */
   var myLocalityLevels = computeValidLocalityLevels()
   var localityWaits = myLocalityLevels.map(getLocalityWait) // Time to wait at each level
 
@@ -935,16 +946,32 @@ private[spark] class TaskSetManager(
   /**
    * Compute the locality levels used in this TaskSet. Assumes that all tasks have already been
    * added to queues using addPendingTask.
-   *
+   * 计算此TaskSet中的locality levels,假设所有任务已经使用addPendingTask添加到队列中。
+    *
+    * 这个函数的作用是：
+taskSetManager的locality levels是否包含"PROCESS_LOCAL"
+taskSetManager的locality levels是否包含"NODE_LOCAL"
+taskSetManager的locality levels是否包含"NO_PREF"
+taskSetManager的locality levels是否包含"RACK_LOCAL"
    */
   private def computeValidLocalityLevels(): Array[TaskLocality.TaskLocality] = {
     import TaskLocality.{PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY}
     val levels = new ArrayBuffer[TaskLocality.TaskLocality]
+
+    /**
+      * 判断是否为PROCESS_LOCAL
+      * 关键的方法：pendingTasksForExecutor.keySet.exists(sched.isExecutorAlive(_))
+      * isExecutorAlive 判断当前参数中的 executor id 是否 为active的
+      * 每当 DAGScheduler 提交 taskSet 会触发 TaskScheduler 调用 resourceOffers 方法，该方法会更新当前可用的 executors 至 activeExecutorIds；
+当有 executor lost 的时候，TaskSchedulerImpl 也会调用 removeExecutor 来将 lost 的executor 从 activeExecutorIds 中去除
+      */
     if (!pendingTasksForExecutor.isEmpty && getLocalityWait(PROCESS_LOCAL) != 0 &&
+        //所有partition所在的exector中task所对应的executor里，是否有任意一个active的。 若有，返回true
         pendingTasksForExecutor.keySet.exists(sched.isExecutorAlive(_))) {
       levels += PROCESS_LOCAL
     }
     if (!pendingTasksForHost.isEmpty && getLocalityWait(NODE_LOCAL) != 0 &&
+      //同理，taskSetManager 的所有 partition 对应的所有 hosts，是否有任一是 tasks 所在的hosts，若有返回 true；否则返回 false。
         pendingTasksForHost.keySet.exists(sched.hasExecutorsAliveOnHost(_))) {
       levels += NODE_LOCAL
     }
@@ -955,6 +982,7 @@ private[spark] class TaskSetManager(
         pendingTasksForRack.keySet.exists(sched.hasHostAliveOnRack(_))) {
       levels += RACK_LOCAL
     }
+    // 对于所有的 taskSetManager 均包含 ANY
     levels += ANY
     logDebug("Valid locality levels for " + taskSet + ": " + levels.mkString(", "))
     levels.toArray

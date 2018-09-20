@@ -964,13 +964,16 @@ class DAGScheduler(
         outputCommitCoordinator.stageStart(
           stage = s.id, maxPartitionId = s.rdd.partitions.length - 1)
     }
+    //    调用返回的 taskIdToLocations: Map[Int, Seq[TaskLocation]](即taskIdToLocations: Seq[ taskId -> Seq[hosts] ])
     val taskIdToLocations: Map[Int, Seq[TaskLocation]] = try {
       stage match {
         case s: ShuffleMapStage =>
+          //获取任务关联的RDD的位置，下面构建taskSet的时候会用到
           partitionsToCompute.map { id => (id, getPreferredLocs(stage.rdd, id))}.toMap
         case s: ResultStage =>
           partitionsToCompute.map { id =>
             val p = s.partitions(id)
+            //获取任务关联的RDD的位置，下面构建taskSet的时候会用到
             (id, getPreferredLocs(stage.rdd, p))
           }.toMap
       }
@@ -1026,6 +1029,7 @@ class DAGScheduler(
         case stage: ShuffleMapStage =>
           //根据stage对应的RDD中partition的个数生成task
           partitionsToCompute.map { id =>
+            //利用上面计算得到的位置
             val locs = taskIdToLocations(id)
             val part = stage.rdd.partitions(id)
             new ShuffleMapTask(stage.id, stage.latestInfo.attemptId,
@@ -1052,7 +1056,11 @@ class DAGScheduler(
       logInfo("Submitting " + tasks.size + " missing tasks from " + stage + " (" + stage.rdd + ")")
       stage.pendingPartitions ++= tasks.map(_.partitionId)
       logDebug("New pending partitions: " + stage.pendingPartitions)
-      // 根据tasks生成TaskSet，最终由TaskScheduler.submitTasks方法提交TaskSet
+
+      /**
+        * 向TaskScheduler提交了taskSet
+        */
+      // 根据tasks生成TaskSet，最终由 TaskScheduler.submitTasks方法提交TaskSet
       taskScheduler.submitTasks(new TaskSet(
         tasks.toArray, stage.id, stage.latestInfo.attemptId, jobId, properties))
       stage.latestInfo.submissionTime = Some(clock.getTimeMillis())

@@ -185,11 +185,15 @@ private[spark] class TaskSchedulerImpl(
     waitBackendReady()
   }
 
+  /**
+    * DAGScheduler 的 submitMissingTasks()调用后 流程会走到这里
+    * @param taskSet
+    */
   override def submitTasks(taskSet: TaskSet) {
     val tasks = taskSet.tasks
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
     this.synchronized {
-      // 生成一个TaskSetManager类型对象，
+      // 为每个 taskSet 生成一个TaskSetManager类型对象，
       // task最大重试次数，由参数spark.task.maxFailures设置，默认为4
       val manager = createTaskSetManager(taskSet, maxTaskFailures)
       val stage = taskSet.stageId

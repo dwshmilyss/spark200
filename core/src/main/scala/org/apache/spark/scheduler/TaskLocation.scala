@@ -28,6 +28,7 @@ private[spark] sealed trait TaskLocation {
 
 /**
  * A location that includes both a host and an executor id on that host.
+  * 代表partition数据已经被cache到内存，比如KafkaRDD会将partitions都cache到内存，其toString方法返回的格式如executor_$host_$executorId.
  */
 private [spark]
 case class ExecutorCacheTaskLocation(override val host: String, executorId: String)
@@ -37,6 +38,7 @@ case class ExecutorCacheTaskLocation(override val host: String, executorId: Stri
 
 /**
  * A location on a host.
+  * 代表partition数据存储在某个节点的磁盘上（且不在hdfs上）,其toString方法直接返回host.
  */
 private [spark] case class HostTaskLocation(override val host: String) extends TaskLocation {
   override def toString: String = host
@@ -44,6 +46,7 @@ private [spark] case class HostTaskLocation(override val host: String) extends T
 
 /**
  * A location on a host that is cached by HDFS.
+  * 代表partition数据存储在hdfs上，比如从hdfs上加载而来的 HadoopRDD 的 partition，其toString方法返回的格式如 hdfs_cache_$host.
  */
 private [spark] case class HDFSCacheTaskLocation(override val host: String) extends TaskLocation {
   override def toString: String = TaskLocation.inMemoryLocationTag + host
