@@ -228,7 +228,13 @@ private[spark] class TaskSchedulerImpl(
       }
       hasReceivedTask = true
     }
-    // 向schedulerBackend申请资源
+
+    /**
+      * 向 schedulerBackend(CoarseGrainedSchedulerBackend)申请资源
+      * 根据集群模式的不同 schedulerBackend的实现类也不同 有 yarn  mesos  standalone
+      * 但是reviveOffers() 如果是yarn或者standalone模式  则都是 CoarseGrainedSchedulerBackend 实现的
+      * 如果是mesos模式 则是 MesosFineGrainedSchedulerBackend 实现
+      */
     backend.reviveOffers()
   }
 

@@ -84,6 +84,9 @@ private[spark] class StandaloneAppClient(
     private val askAndReplyThreadPool =
       ThreadUtils.newDaemonCachedThreadPool("appclient-receive-and-reply-threadpool")
 
+    /**
+      * 这里client会向master注册application  接着master就会分配executor， 调用schedule()。 启动 CoarseGrainedExecutorBackend 进程
+      */
     override def onStart(): Unit = {
       try {
         registerWithMaster(1)
@@ -107,6 +110,10 @@ private[spark] class StandaloneAppClient(
             }
             logInfo("Connecting to master " + masterAddress.toSparkURL + "...")
             val masterRef = rpcEnv.setupEndpointRef(masterAddress, Master.ENDPOINT_NAME)
+
+            /**
+              * 向master 发送 RegisterApplication 消息
+              */
             masterRef.send(RegisterApplication(appDescription, self))
           } catch {
             case ie: InterruptedException => // Cancelled
@@ -277,6 +284,9 @@ private[spark] class StandaloneAppClient(
 
   }
 
+  /**
+    * SparkContext -> 这里（因为是个 RpcEndPoint。 Spark中每个 RpcEndPoint 启动后，都会默认向自己的inbox中添加一个OnStart消息） ->
+    */
   def start() {
     // Just launch an rpcEndpoint; it will call back into the listener.
     endpoint.set(rpcEnv.setupEndpoint("AppClient", new ClientEndpoint(rpcEnv)))

@@ -142,7 +142,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         }
 
       /**
-        *  上接backend.reviveOffers()
+        *  上接 CoarseGrainedSchedulerBackend.reviveOffers()
         */
       case ReviveOffers =>
         makeOffers()
@@ -225,7 +225,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     private def makeOffers() {
       // Filter out executors under killing
       val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
-      //资源生成好封装成WorkerOffer类型的队列后，就开始进入SchedulerBackend中，由SchedulerBackend分配这些资源
+      //封装成 WorkerOffer 类型，就开始进入 SchedulerBackend 中，由 SchedulerBackend 分配这些资源
       val workOffers = activeExecutors.map { case (id, executorData) =>
         new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
       }.toSeq
@@ -282,7 +282,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             s"${executorData.executorHost}.")
 
           //发送到executor上执行(standalone 模式下是 CoarseGrainedExecutorBackend )
-          //CoarseGrainedExecutorBackend 是在启动 StandaloneSchedulerBackend 的时候启动的
+          //CoarseGrainedExecutorBackend -> StandaloneSchedulerBackend.start() 在start()方法中封装成Command命令 -> 在Worker进程收到 LaunchExecutor 消息的时候启动的
           executorData.executorEndpoint.send(LaunchTask(new SerializableBuffer(serializedTask)))
         }
       }
@@ -413,8 +413,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   /**
-    * 上接TashSchedulerImpl的backend.reviveOffers()
-    *  driverEndpoint也在这个类中
+    * 上接TashSchedulerImpl的backend.reviveOffers() -> DriverEndpoint.receive()
+    *  driverEndpoint 也在这个类中
     */
   override def reviveOffers() {
     driverEndpoint.send(ReviveOffers)

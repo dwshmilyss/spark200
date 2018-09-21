@@ -89,7 +89,10 @@ private[spark] class StandaloneSchedulerBackend(
     // Start executors with a few necessary configs for registering with the scheduler
     val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)
     val javaOpts = sparkJavaOpts ++ extraJavaOpts
-    //用command拼接参数，最终会启动org.apache.spark.executor.CoarseGrainedExecutorBackend子进程
+
+    /**
+      * 用command拼接参数，最终会启动org.apache.spark.executor.CoarseGrainedExecutorBackend子进程
+      */
     val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
       args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
     val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")
@@ -108,6 +111,10 @@ private[spark] class StandaloneSchedulerBackend(
       appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor, initialExecutorLimit)
     //启动AppClientEndpoint
     client = new StandaloneAppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
+
+    /**
+      * start() 默认会调用 StandaloneAppClient.OnStart()
+      */
     client.start()
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
     waitForRegistration()
