@@ -968,7 +968,7 @@ class DAGScheduler(
     val taskIdToLocations: Map[Int, Seq[TaskLocation]] = try {
       stage match {
         case s: ShuffleMapStage =>
-          //获取任务关联的RDD的位置，下面构建taskSet的时候会用到
+          //获取任务关联的RDD的位置，以判断task的任务本地性。下面构建taskSet的时候会用到
           partitionsToCompute.map { id => (id, getPreferredLocs(stage.rdd, id))}.toMap
         case s: ResultStage =>
           partitionsToCompute.map { id =>
@@ -1533,6 +1533,7 @@ class DAGScheduler(
   }
 
   /**
+    * 返回的是 Seq[TaskLocation], TaskLocation 内仅一个变量: host
    * Gets the locality information associated with a partition of a particular RDD.
    *
    * This method is thread-safe and is called from both DAGScheduler and SparkContext.
@@ -1564,11 +1565,14 @@ class DAGScheduler(
       return Nil
     }
     // If the partition is cached, return the cache locations
+    // rdd 有缓存的话，直接获取缓存的位置信息
     val cached = getCacheLocs(rdd)(partition)
     if (cached.nonEmpty) {
       return cached
     }
     // If the RDD has some placement preferences (as is the case for input RDDs), get those
+    // 调rdd.preferredLocations => getPreferredLocations() 方法,对于那种直接从外部数据源（比如hdfs）形成的rdd，这里就直接返回数据所在的地址了。
+    // 但是占大多数的 MapPartitionsRDD 未实现 getPreferredLocations() ，所以关键还在后面的递归
     val rddPrefs = rdd.preferredLocations(rdd.partitions(partition)).toList
     if (rddPrefs.nonEmpty) {
       return rddPrefs.map(TaskLocation(_))
@@ -1577,6 +1581,7 @@ class DAGScheduler(
     // If the RDD has narrow dependencies, pick the first partition of the first narrow dependency
     // that has any placement preferences. Ideally we would choose based on transfer sizes,
     // but this will do for now.
+    // ***** 如果RDD是窄依赖，则递归查找窄依赖链条上的第一个RDD的第一个Partition的数据Location作为locs
     rdd.dependencies.foreach {
       case n: NarrowDependency[_] =>
         for (inPart <- n.getParents(partition)) {

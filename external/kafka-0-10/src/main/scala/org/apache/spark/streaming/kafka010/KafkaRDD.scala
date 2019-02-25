@@ -149,6 +149,11 @@ private[spark] class KafkaRDD[K, V](
    */
   private def floorMod(a: Int, b: Int): Int = ((a % b) + b) % b
 
+  /**
+    * 返回topic分区的位置
+    * @param thePart
+    * @return
+    */
   override def getPreferredLocations(thePart: Partition): Seq[String] = {
     // The intention is best-effort consistent executor for a given topicpartition,
     // so that caching consumers can be effective.

@@ -18,14 +18,14 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 
 private[streaming]
-class LatestFileInputStream[K, V, F <: NewInputFormat[K, V]](
-                                                              _ssc: StreamingContext,
-                                                              directory: String,
-                                                              filter: Path => Boolean = LatestFileInputStream.defaultFilter,
-                                                              newFilesOnly: Boolean = true,
-                                                              conf: Option[Configuration] = None,
-                                                              rememberDuration: Duration = Minutes(60))
-                                                            (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F])
+class LatestFileInputDStream[K, V, F <: NewInputFormat[K, V]](
+                                                               _ssc: StreamingContext,
+                                                               directory: String,
+                                                               filter: Path => Boolean = LatestFileInputDStream.defaultFilter,
+                                                               newFilesOnly: Boolean = true,
+                                                               conf: Option[Configuration] = None,
+                                                               rememberDuration: Duration = Minutes(60))
+                                                             (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F])
   extends InputDStream[(K, V)](_ssc) {
 
   private val serializableConfOpt = conf.map(new SerializableConfiguration(_))
@@ -42,7 +42,7 @@ class LatestFileInputStream[K, V, F <: NewInputFormat[K, V]](
   }
 
   /**
-    * 自己定义的变量
+    * 定义一个变量，记录每次读取文件（HDFS）后生成RDD的时间
     */
   private[streaming] var rddGenerateTime: Long = 0
   private[streaming] var rememberRDDs: Option[RDD[(K, V)]] = _
@@ -62,7 +62,7 @@ class LatestFileInputStream[K, V, F <: NewInputFormat[K, V]](
    * This would allow us to filter away not-too-old files which have already been recently
    * selected and processed.
    */
-  private val numBatchesToRemember = LatestFileInputStream
+  private val numBatchesToRemember = LatestFileInputDStream
     .calculateNumBatchesToRemember(slideDuration, minRememberDurationS)
   private val durationToRemember = slideDuration * numBatchesToRemember
   remember(durationToRemember)
@@ -100,10 +100,10 @@ class LatestFileInputStream[K, V, F <: NewInputFormat[K, V]](
   override def compute(validTime: Time): Option[RDD[(K, V)]] = {
     if (rddGenerateTime == 0 || Duration(validTime.milliseconds - rddGenerateTime) >= durationToRemember) {
       //从HDFS读取数据生成的RDD的周期为durationToRemember
-//      val newFiles = findNewFiles(validTime.milliseconds) //这个方法会加载目录里面的所有文件
+      //      val newFiles = findNewFiles(validTime.milliseconds) //这个方法会加载目录里面的所有文件
       //如果不是第一次加载，为了能识别出slideDuration这段时间内新增的文件，所以要给rddGenerateTime加上slide
       //这个时间要在findNewFiles(rddGenerateTime)中用到，是判断的截止时间（即认为rddGenerateTime为当前时间）
-      if (rddGenerateTime != 0){
+      if (rddGenerateTime != 0) {
         rddGenerateTime += durationToRemember.milliseconds
       }
       val newFiles = findNewFiles(rddGenerateTime) //这个方法会加载目录里面的所有文件
@@ -221,10 +221,10 @@ class LatestFileInputStream[K, V, F <: NewInputFormat[K, V]](
       return false
     }
     //第一次读取目录默认加载里面所有的文件
-    if (currentTime == 0){
+    if (currentTime == 0) {
       logDebug(s"$pathStr is first load")
       return true
-    }else{
+    } else {
       // Reject file if it was created before the ignore time
       val modTime = getFileModTime(path)
       if (modTime <= modTimeIgnoreThreshold) {
@@ -247,6 +247,12 @@ class LatestFileInputStream[K, V, F <: NewInputFormat[K, V]](
     return true
   }
 
+  /**
+    * 这个方法也是存储NewHadoopRDD到内存的关键代码
+    *
+    * @param files
+    * @return
+    */
   private def filesToRDD(files: Seq[String]): RDD[(K, V)] = {
     val fileRDDs = files.map { file =>
       val rdd = serializableConfOpt.map(_.value) match {
@@ -355,7 +361,7 @@ class LatestFileInputStream[K, V, F <: NewInputFormat[K, V]](
 }
 
 private[streaming]
-object LatestFileInputStream {
+object LatestFileInputDStream {
 
   def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
 

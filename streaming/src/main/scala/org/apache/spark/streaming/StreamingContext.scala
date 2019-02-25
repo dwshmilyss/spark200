@@ -425,7 +425,7 @@ class StreamingContext private[streaming] (
     V: ClassTag,
     F <: NewInputFormat[K, V]: ClassTag
   ] (directory: String,rememberDuration: Duration,newFilesOnly:Boolean): InputDStream[(K, V)] = {
-    new LatestFileInputStream[K, V, F](this, directory,rememberDuration = rememberDuration,newFilesOnly = newFilesOnly)
+    new LatestFileInputDStream[K, V, F](this, directory,rememberDuration = rememberDuration,newFilesOnly = newFilesOnly)
   }
 
   /**

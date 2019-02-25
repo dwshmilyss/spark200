@@ -444,10 +444,13 @@ abstract class DStream[T: ClassTag] (
    * This is an internal method that should not be called directly. This default
    * implementation clears the old generated RDDs. Subclasses of DStream may override
    * this to clear their own metadata along with the generated RDDs.
+    *
+    * 当一个batch处理结束之后，会将remeberDuration时间间隔之前的RDD删除，并且将这个RDD在BlockManager中占用的内存块释放。
+    * 所以通过设置自定义InputDStream的remeberDuration来防止一个batch产生的RDD马上被释放。
    */
   private[streaming] def clearMetadata(time: Time) {
     val unpersistData = ssc.conf.getBoolean("spark.streaming.unpersist", true)
-    val oldRDDs = generatedRDDs.filter(_._1 <= (time - rememberDuration))
+    val oldRDDs = generatedRDDs.filter(_._1 <= (time - rememberDuration)) //清除remeberDuration时间间隔之前的RDD
     logDebug("Clearing references to old RDDs: [" +
       oldRDDs.map(x => s"${x._1} -> ${x._2.id}").mkString(", ") + "]")
     generatedRDDs --= oldRDDs.keys

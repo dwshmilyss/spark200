@@ -179,11 +179,11 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   private def processEvent(event: JobGeneratorEvent) {
     logDebug("Got event " + event)
     event match {
-      case GenerateJobs(time) => generateJobs(time)
-      case ClearMetadata(time) => clearMetadata(time)
+      case GenerateJobs(time) => generateJobs(time) //生成任务
+      case ClearMetadata(time) => clearMetadata(time) // 一个Spark-streaming batch处理结束之后，会发送ClearMetadata事件来清除这个batch的数据
       case DoCheckpoint(time, clearCheckpointDataLater) =>
         doCheckpoint(time, clearCheckpointDataLater)//写入一个Checkpoint对象，其核心就是采用序列化技术把对象写入磁盘
-      case ClearCheckpointData(time) => clearCheckpointData(time)
+      case ClearCheckpointData(time) => clearCheckpointData(time)//清除checkpointData
     }
   }
 
