@@ -222,6 +222,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     // Make fake resource offers on all executors
+    /**
+      * DriverEndPoint接收到申请资源的请求后走到这里。
+      */
     private def makeOffers() {
       // Filter out executors under killing
       val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
@@ -257,6 +260,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     // Launch tasks returned by a set of resource offers
+    /**
+      * 启动task
+      * 上接 CoarseGrainedSchedulerBackend.makeOffers
+      * @param tasks
+      */
     private def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
       for (task <- tasks.flatten) {
         val serializedTask = ser.serialize(task)
@@ -282,6 +290,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             s"${executorData.executorHost}.")
 
           //发送到executor上执行(standalone 模式下是 CoarseGrainedExecutorBackend )
+          // 这里会跳到 CoarseGrainedExecutorBackend.receive
           //CoarseGrainedExecutorBackend -> StandaloneSchedulerBackend.start() 在start()方法中封装成Command命令 -> 在Worker进程收到 LaunchExecutor 消息的时候启动的
           executorData.executorEndpoint.send(LaunchTask(new SerializableBuffer(serializedTask)))
         }

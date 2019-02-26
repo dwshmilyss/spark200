@@ -135,15 +135,26 @@ private[spark] class Executor(
 
   startDriverHeartbeater()
 
+  /**
+    * 上接 CoarseGrainedExecutorBackend.launchTask
+    * 真正执行task
+    * @param context
+    * @param taskId
+    * @param attemptNumber
+    * @param taskName
+    * @param serializedTask
+    */
   def launchTask(
       context: ExecutorBackend,
       taskId: Long,
       attemptNumber: Int,
       taskName: String,
       serializedTask: ByteBuffer): Unit = {
+    //封装成一个 TaskRunner
     val tr = new TaskRunner(context, taskId = taskId, attemptNumber = attemptNumber, taskName,
       serializedTask)
     runningTasks.put(taskId, tr)
+    //由线程池运行任务
     threadPool.execute(tr)
   }
 

@@ -76,8 +76,9 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   override def receive: PartialFunction[Any, Unit] = {
+    //这个在SparkContext启动的时候就会发送该消息
     //收到 DriverEndpoint 发送的 RegisteredExecutor 消息后，启动executor
-    // StandaloneSchedulerBackend.start() -> CoarseGrainedExecutorBackend.run() -> setupEndpoint("Executor", new CoarseGrainedExecutorBackend())
+    // SparkContext启动 -> StandaloneSchedulerBackend.start() -> CoarseGrainedExecutorBackend.run() -> setupEndpoint("Executor", new CoarseGrainedExecutorBackend())
     // -> CoarseGrainedExecutorBackend.onStart() -> DriverEndpointRef.ask(RegisterExecutor)
     // -> DriverEndpointRef.receiveAndReply(RegisterExecutor) -> CoarseGrainedExecutorBackend.send(RegisteredExecutor)
     case RegisteredExecutor =>
@@ -92,6 +93,9 @@ private[spark] class CoarseGrainedExecutorBackend(
     case RegisterExecutorFailed(message) =>
       exitExecutor(1, "Slave registration failed: " + message)
 
+    /**
+      * 上接 CoarseGrainedSchedulerBackend.launchTask
+      */
     case LaunchTask(data) =>
       if (executor == null) {// 如果分配的executor为空，即当前task无分配的executor，则直接退出
         exitExecutor(1, "Received LaunchTask command but executor was null")
