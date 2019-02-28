@@ -133,7 +133,9 @@ class StreamingContext private[streaming] (
 
   private[streaming] val isCheckpointPresent: Boolean = _cp != null
 
-  //首先构建SparkContext
+  /**
+    * 1、首先构建SparkContext
+    */
   private[streaming] val sc: SparkContext = {
     if (_sc != null) {
       _sc
@@ -153,11 +155,15 @@ class StreamingContext private[streaming] (
 
   private[streaming] val env = sc.env
 
-  //构建DAG graph
+  /**
+    * 2、构建DAG graph
+    */
   private[streaming] val graph: DStreamGraph = {
     if (isCheckpointPresent) {
       _cp.graph.setContext(this)
-      _cp.graph.restoreCheckpointData() //从checkpoint中恢复DStreamGraph
+      //从checkpoint中恢复DStreamGraph
+      //这一步最关键
+      _cp.graph.restoreCheckpointData()
       _cp.graph
     } else {
       require(_batchDur != null, "Batch duration for StreamingContext cannot be null")
@@ -178,6 +184,9 @@ class StreamingContext private[streaming] (
     }
   }
 
+  /**
+    * 3、恢复checkpointDuration
+    */
   private[streaming] val checkpointDuration: Duration = {
     if (isCheckpointPresent) _cp.checkpointDuration else graph.batchDuration
   }

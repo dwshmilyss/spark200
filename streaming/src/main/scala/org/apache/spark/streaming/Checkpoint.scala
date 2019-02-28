@@ -31,6 +31,11 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.streaming.scheduler.JobGenerator
 import org.apache.spark.util.Utils
 
+/**
+  * 该类保存了streaming 的上下文环境
+  * @param ssc
+  * @param checkpointTime
+  */
 private[streaming]
 class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
   extends Logging with Serializable {
@@ -346,10 +351,12 @@ object CheckpointReader extends Logging {
     // Try to read the checkpoint files in the order
     logInfo(s"Checkpoint files found: ${checkpointFiles.mkString(",")}")
     var readError: Exception = null
+    //循环checkpoint目录中的所有文件
     checkpointFiles.foreach { file =>
       logInfo(s"Attempting to load checkpoint from file $file")
       try {
         val fis = fs.open(file)
+        //发序列化
         val cp = Checkpoint.deserialize(fis, conf)
         logInfo(s"Checkpoint successfully loaded from file $file")
         logInfo(s"Checkpoint was generated at time ${cp.checkpointTime}")
