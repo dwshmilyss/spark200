@@ -509,6 +509,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _applicationAttemptId = taskScheduler.applicationAttemptId()
     _conf.set("spark.app.id", _applicationId)
     _ui.foreach(_.setAppId(_applicationId))
+    //初始化driver上的blockManager，只有执行这段代码之后，blockManager才可用
     _env.blockManager.initialize(_applicationId)
 
     // The metrics system for Driver need to be set spark.app.id to app ID.
